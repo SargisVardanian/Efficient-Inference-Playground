@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+results/raw/*.csv
+results/processed/*.csv
+results/plots/*.png
+results/plots/*.pdf
+*.zip
+
