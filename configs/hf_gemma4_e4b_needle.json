@@ -1,0 +1,31 @@
+{
+  "model_id": "google/gemma-4-E4B-it",
+  "runs_per_prompt": 1,
+  "device": "mps",
+  "experiments": [
+    {
+      "name": "hf_baseline_gemma4_e4b",
+      "technique": "baseline",
+      "max_new_tokens": 32
+    },
+    {
+      "name": "hf_quantized_gemma4_e4b_int4",
+      "technique": "quantization",
+      "max_new_tokens": 32,
+      "quantization": {
+        "method": "metal",
+        "bits": 4
+      }
+    },
+    {
+      "name": "hf_kv_window_gemma4_e4b",
+      "technique": "kv_cache_window",
+      "max_new_tokens": 32,
+      "cache_policy": {
+        "type": "sliding_window",
+        "window_length": 1024,
+        "num_sink_tokens": 4
+      }
+    }
+  ]
+}

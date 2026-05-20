@@ -11,13 +11,14 @@ Primary backend:
 
 Secondary backend:
 
-- Hugging Face Transformers for speculative decoding, because it exposes `assistant_model` generation while Ollama does not expose a stable low-level target/draft API.
+- Hugging Face Transformers for standardized baseline, quantization, speculative decoding, and KV-cache policy experiments.
 
 Techniques covered:
 
 - Baseline generation.
-- Weight quantization through Ollama model variants, for example Q4/Q8 tags if installed.
+- Weight quantization through Ollama model variants when available, or through Transformers quantization backends.
 - Speculative decoding through Transformers target + assistant models.
+- KV-cache policy experiments through Transformers cache controls.
 
 Optional extension:
 
@@ -51,6 +52,15 @@ Check local Ollama models:
 ```bash
 ollama list
 python scripts/check_ollama.py --model gemma4:e4b
+```
+
+Generate the standardized Needle-only prompt set:
+
+```bash
+python scripts/prepare_benchmark_prompts.py \
+  --mode needle \
+  --count 10 \
+  --out prompts/needle_eval_prompts.jsonl
 ```
 
 Run the Ollama benchmark:
@@ -90,6 +100,25 @@ python scripts/run_hf_speculative.py \
   --max_new_tokens 128
 ```
 
+Run the standardized Hugging Face baseline / int4 / KV benchmark:
+
+```bash
+python scripts/run_hf_experiments.py \
+  --config configs/hf_gemma4_e4b_needle.json \
+  --prompts prompts/needle_eval_prompts.jsonl \
+  --out results/raw/hf_needle_benchmark.csv
+
+python scripts/evaluate_task_quality.py \
+  --input results/raw/hf_needle_benchmark.csv \
+  --out results/processed/hf_needle_quality.csv
+
+python scripts/summarize_results.py \
+  --input results/raw/hf_needle_benchmark.csv \
+  --quality results/processed/hf_needle_quality.csv \
+  --out_csv results/processed/hf_needle_summary.csv \
+  --out_md results/processed/hf_needle_summary.md
+```
+
 ## Experiment Matrix
 
 Start with this minimum table:
@@ -127,4 +156,3 @@ Quality:
 ## Deadline Note
 
 The assignment deadline is Friday, 22 May 2026, 12:00 AM. Treat this as the beginning of Friday and plan to submit on Thursday evening, 21 May 2026.
-

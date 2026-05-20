@@ -1,0 +1,9 @@
+# Benchmark Summary
+
+Source CSV: `results/raw/ollama_needle_benchmark.csv`
+
+| experiment             | technique      | length_bucket   | task                   | dataset              |   prompts |   runs |   latency_s_mean |   latency_s_median |   tokens_per_second_mean |   prompt_tokens_mean |   generated_tokens_mean |   rss_after_mb_mean |   system_used_after_mb_mean |   reference_exact_match_mean |   reference_contains_match_mean |
+|:-----------------------|:---------------|:----------------|:-----------------------|:---------------------|----------:|-------:|-----------------:|-------------------:|-------------------------:|---------------------:|------------------------:|--------------------:|----------------------------:|-----------------------------:|--------------------------------:|
+| ollama_gemma4_e4b_q4km | ollama_q4_gguf | long            | long_context_retrieval | needle_in_a_haystack |        10 |     10 |         12.6844  |          13.8824   |                  33.2951 |               7155.6 |                    20   |             21.3891 |                     13778   |                          0.1 |                             0.6 |
+| ollama_gemma4_e4b_q4km | ollama_q4_gguf | medium          | long_context_retrieval | needle_in_a_haystack |        10 |     10 |          2.85057 |           2.70399  |                  38.6915 |               1812.6 |                    11.1 |             26.4984 |                     13854.7 |                          0.5 |                             0.9 |
+| ollama_gemma4_e4b_q4km | ollama_q4_gguf | short           | long_context_retrieval | needle_in_a_haystack |        10 |     10 |          6.38041 |           0.677197 |                  40.6226 |                236.6 |                    11.1 |             25.0437 |                     13795.7 |                          0.8 |                             0.8 |

@@ -37,6 +37,8 @@ def main() -> int:
         "prompt_id",
         "length_bucket",
         "task",
+        "dataset",
+        "reference",
         "run",
         "latency_s",
         "first_token_latency_s",
@@ -72,6 +74,8 @@ def main() -> int:
                             "prompt_id": prompt["id"],
                             "length_bucket": prompt["length_bucket"],
                             "task": prompt.get("task", ""),
+                            "dataset": prompt.get("dataset", ""),
+                            "reference": prompt.get("reference", ""),
                             "run": run_idx + 1,
                             "latency_s": result.latency_s,
                             "first_token_latency_s": result.first_token_latency_s,
@@ -95,4 +99,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

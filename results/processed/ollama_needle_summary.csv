@@ -1,0 +1,4 @@
+experiment,technique,length_bucket,task,dataset,prompts,runs,latency_s_mean,latency_s_median,tokens_per_second_mean,prompt_tokens_mean,generated_tokens_mean,rss_after_mb_mean,system_used_after_mb_mean,reference_exact_match_mean,reference_contains_match_mean
+ollama_gemma4_e4b_q4km,ollama_q4_gguf,long,long_context_retrieval,needle_in_a_haystack,10,10,12.684381466599007,13.8824092710056,33.295054818958114,7155.6,20.0,21.3890625,13778.03125,0.1,0.6
+ollama_gemma4_e4b_q4km,ollama_q4_gguf,medium,long_context_retrieval,needle_in_a_haystack,10,10,2.8505721125999117,2.7039891254971735,38.69146634674546,1812.6,11.1,26.4984375,13854.7375,0.5,0.9
+ollama_gemma4_e4b_q4km,ollama_q4_gguf,short,long_context_retrieval,needle_in_a_haystack,10,10,6.380412933298794,0.6771973750001052,40.622554326458385,236.6,11.1,25.04375,13795.653125,0.8,0.8

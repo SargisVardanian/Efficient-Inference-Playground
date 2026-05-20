@@ -1,0 +1,19 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "runs_per_prompt": 1,
+  "generation_options": {
+    "temperature": 0,
+    "top_p": 1,
+    "num_predict": 32,
+    "num_ctx": 8192,
+    "seed": 42
+  },
+  "experiments": [
+    {
+      "name": "ollama_gemma4_e4b_q4km",
+      "model": "gemma4:e4b",
+      "technique": "ollama_q4_gguf",
+      "notes": "Local Ollama model reports quantization=Q4_K_M via `ollama show gemma4:e4b`."
+    }
+  ]
+}
