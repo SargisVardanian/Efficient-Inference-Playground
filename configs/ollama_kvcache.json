@@ -5,24 +5,15 @@
     "temperature": 0,
     "top_p": 1,
     "num_predict": 128,
-    "num_ctx": 8192,
+    "num_ctx": 512,
     "seed": 42
   },
   "experiments": [
     {
-      "name": "baseline_gemma4_e4b",
-      "model": "gemma4:e4b",
-      "technique": "baseline"
-    },
-    {
       "name": "kvcache_limited_512",
       "model": "gemma4:e4b",
       "technique": "kv_cache_eviction",
-      "options": {
-        "num_ctx": 512
-      },
-      "notes": "Limits context window to 512 tokens, simulating KV-cache eviction / SinkCache."
+      "notes": "Context window limited to 512 tokens, simulating KV-cache eviction / SinkCache policy."
     }
   ]
 }
-

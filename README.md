@@ -1,60 +1,96 @@
 # Efficient Inference Playground
 
-Benchmark playground for Project D: compare efficient inference techniques for a small-to-medium LLM across speed, memory, and output quality.
+**AUA NLP Course — Project D**
 
-## Project Scope
+Benchmark playground for comparing efficient inference techniques on a small-to-medium LLM. We measure how much speed and memory you gain — and how much output quality you lose — when applying inference optimisations.
 
-Primary backend:
+---
 
-- `Ollama` with local `gemma4:e4b` for baseline measurements.
-- Additional Ollama model tags can be added for quantized variants when available locally.
+## Techniques Compared
 
-Secondary backend:
+| Technique | Backend | Description |
+|---|---|---|
+| **Baseline** | Ollama | `gemma4:e4b` (4-bit quantised GGUF) at full context (8 192 tokens) |
+| **KV-Cache Eviction** | Ollama | Same model, context window capped at 512 tokens — simulates SinkCache-style eviction |
+| **Speculative Decoding** | HuggingFace | Large target model + small draft model via `assistant_model` API |
 
-- Hugging Face Transformers for speculative decoding, because it exposes `assistant_model` generation while Ollama does not expose a stable low-level target/draft API.
+> `gemma4:e4b` is a 4-bit GGUF quantised model, so the baseline experiment simultaneously represents quantised inference on Apple Silicon.
 
-Techniques covered:
+---
 
-- Baseline generation.
-- Weight quantization through Ollama model variants, for example Q4/Q8 tags if installed.
-- Speculative decoding through Transformers target + assistant models.
+## Evaluation Datasets
 
-Optional extension:
+### Summarisation
+| Split | Dataset | Prompt length |
+|---|---|---|
+| Short | CNN/DailyMail | ~150 tokens |
+| Medium | CNN/DailyMail | ~800 tokens |
+| Long | GovReport (`ccdv/govreport-summarization`) | ~8 000 tokens (truncated) |
 
-- KV-cache policy experiments or long-context cache settings, if time and hardware allow.
+### Reasoning
+| Split | Dataset | Prompt length |
+|---|---|---|
+| Short | GSM8K | ~80 tokens (raw problem) |
+| Medium | GSM8K | ~1 000 tokens (padded with filler context) |
+| Long | GSM8K | ~8 000 tokens (padded with filler context) |
+
+**5 prompts per split → 30 prompts total.**
+
+GSM8K medium/long prompts are padded intentionally: they test whether the model can extract and solve a math problem when it is surrounded by irrelevant context — stress-testing both reasoning and long-context handling.
+
+---
 
 ## Repository Layout
 
-```text
-configs/                 Experiment configs
-prompts/                 Evaluation prompts at short, medium, and long lengths
-scripts/                 CLI entrypoints for checks, benchmarks, evaluation, and plots
-src/eip/                 Reusable Python package code
-results/raw/             Raw benchmark CSV files
-results/processed/       Quality metrics and joined analysis CSV files
-results/plots/           Generated figures
-report/                  Technical report outline
-presentation/            Presentation outline
-team_members.txt         Team roster
+```
+configs/            Experiment configs (Ollama JSON)
+prompts/            30 evaluation prompts (JSONL)
+scripts/            CLI scripts: prepare prompts, run benchmarks, evaluate, plot
+src/eip/            Reusable Python package (metrics, Ollama client, plotting, system stats)
+results/raw/        Raw benchmark CSVs  (git-ignored, generated locally)
+results/processed/  Quality metrics CSVs (git-ignored, generated locally)
+results/plots/      Output figures       (git-ignored, generated locally)
+report/             Technical report outline
+presentation/       Presentation outline
+team_members.txt    Team roster
 ```
 
+---
+
 ## Quick Start
+
+### 1. Install dependencies
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt datasets
 ```
 
-Check local Ollama models:
+### 2. Install and start Ollama, pull the model
 
 ```bash
-ollama list
-python scripts/check_ollama.py --model gemma4:e4b
+brew install ollama
+ollama serve &           # keep running in background
+ollama pull gemma4:e4b   # ~9.6 GB download
 ```
 
-Run the Ollama benchmark:
+### 3. Generate the 30 evaluation prompts
 
+```bash
+python scripts/prepare_prompts.py
+```
+
+Expected output:
+```
+CNN short: 5 | CNN medium: 5 | GovReport long: 5
+GSM8K short: 5 | GSM8K medium: 5 | GSM8K long: 5
+Total: 30 prompts
+```
+
+### 4. Run experiments
+
+**Baseline (gemma4:e4b, full 8 192-token context):**
 ```bash
 python scripts/run_ollama_benchmark.py \
   --config configs/ollama_gemma4.json \
@@ -62,25 +98,15 @@ python scripts/run_ollama_benchmark.py \
   --out results/raw/ollama_benchmark.csv
 ```
 
-Compute quality metrics against the baseline output:
-
+**KV-Cache eviction (512-token context window):**
 ```bash
-python scripts/evaluate_quality.py \
-  --input results/raw/ollama_benchmark.csv \
-  --out results/processed/quality_metrics.csv
+python scripts/run_ollama_benchmark.py \
+  --config configs/ollama_kvcache.json \
+  --prompts prompts/eval_prompts.jsonl \
+  --out results/raw/kvcache_benchmark.csv
 ```
 
-Generate plots:
-
-```bash
-python scripts/make_plots.py \
-  --input results/raw/ollama_benchmark.csv \
-  --quality results/processed/quality_metrics.csv \
-  --outdir results/plots
-```
-
-Run speculative decoding through Hugging Face:
-
+**Speculative decoding (HuggingFace Transformers):**
 ```bash
 python scripts/run_hf_speculative.py \
   --target_model Qwen/Qwen2.5-3B-Instruct \
@@ -90,41 +116,69 @@ python scripts/run_hf_speculative.py \
   --max_new_tokens 128
 ```
 
-## Experiment Matrix
+### 5. Evaluate output quality
 
-Start with this minimum table:
+```bash
+python scripts/evaluate_quality.py \
+  --input results/raw/ollama_benchmark.csv \
+  --out results/processed/quality_metrics.csv
+```
 
-| Experiment | Backend | Technique | Notes |
-| --- | --- | --- | --- |
-| `baseline_gemma4_e4b` | Ollama | Baseline | Uses installed `gemma4:e4b` |
-| `quantized_variant_1` | Ollama | Quantization | Replace with installed Q4/Q8 tag |
-| `hf_baseline` | Transformers | Baseline | Same target model without assistant |
-| `hf_speculative` | Transformers | Speculative decoding | Target + smaller assistant |
+### 6. Generate plots
 
-Measure each row on short, medium, and long prompts.
+```bash
+python scripts/make_plots.py \
+  --input results/raw/ollama_benchmark.csv \
+  --quality results/processed/quality_metrics.csv \
+  --outdir results/plots
+```
 
-## Metrics
+---
 
-Speed:
+## Metrics Collected
 
-- end-to-end latency in seconds
-- first-token latency in seconds for streaming Ollama runs
-- throughput in generated tokens per second
-- per-token latency estimate
+**Speed:**
+- End-to-end latency (seconds) — p50 and p99 across 3 runs
+- First-token latency (seconds)
+- Throughput (tokens / second)
 
-Memory:
+**Memory:**
+- Process RSS delta (MB)
+- System memory used (MB)
 
-- process RSS delta and peak RSS where observable
-- optional `nvidia-smi` peak VRAM on CUDA machines
-- optional `powermetrics` or external tooling for energy
+**Quality:**
+- ROUGE-L vs baseline output
+- Exact match vs baseline output
+- Embedding cosine similarity (sentence-transformers)
 
-Quality:
+---
 
-- exact match against baseline greedy output
-- ROUGE-L against baseline output
-- embedding similarity when `sentence-transformers` is available
+## Experiment Configuration
 
-## Deadline Note
+Each Ollama experiment is a JSON file under `configs/`. Key fields:
 
-The assignment deadline is Friday, 22 May 2026, 12:00 AM. Treat this as the beginning of Friday and plan to submit on Thursday evening, 21 May 2026.
+```json
+{
+  "runs_per_prompt": 3,
+  "generation_options": {
+    "temperature": 0,
+    "num_ctx": 8192,
+    "num_predict": 128
+  },
+  "experiments": [
+    {
+      "name": "baseline_gemma4_e4b",
+      "model": "gemma4:e4b",
+      "technique": "baseline"
+    }
+  ]
+}
+```
 
+`runs_per_prompt: 3` provides median and p99 latency estimates.
+
+---
+
+## Hardware
+
+Tested on Apple M4 Max (37 GB unified memory). Inference runs on Metal (Apple GPU). No CUDA required.
