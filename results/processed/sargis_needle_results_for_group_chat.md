@@ -20,13 +20,20 @@ Available local model:
 | --- | --- | --- | --- |
 | Ollama | `gemma4:e4b` | `Q4_K_M` | 8192 |
 
-Summary:
+Summary with assignment metrics:
 
-| Length | Prompts | Mean prompt tokens | Mean latency, s | Mean tokens/sec | Exact answer match | Contains answer match |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Short | 10 | 236.6 | 6.38 | 40.62 | 0.80 | 0.80 |
-| Medium | 10 | 1812.6 | 2.85 | 38.69 | 0.50 | 0.90 |
-| Long | 10 | 7155.6 | 12.68 | 33.30 | 0.10 | 0.60 |
+| Length | Prompts | Mean prompt tokens | Latency p50, s | Latency p99, s | Per-token latency p50, s | Per-token latency p99, s | Mean tokens/sec | Peak process RSS, MB | Peak system used, MB | Exact answer match | Contains answer match |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Short | 10 | 236.6 | 0.68 | 51.40 | 0.096 | 12.829 | 40.62 | 25.48 | 13871.84 | 0.80 | 0.80 |
+| Medium | 10 | 1812.6 | 2.70 | 4.39 | 0.284 | 1.062 | 38.69 | 26.89 | 13926.42 | 0.50 | 0.90 |
+| Long | 10 | 7155.6 | 13.88 | 18.84 | 0.588 | 1.964 | 33.30 | 27.44 | 13941.22 | 0.10 | 0.60 |
+
+Notes:
+
+- `tokens/sec` comes from Ollama `eval_count / eval_duration`.
+- `per-token latency` is end-to-end latency divided by generated token count.
+- Peak VRAM is not directly exposed by Ollama on Apple Silicon; the table reports peak process RSS and peak system used memory as the available local memory proxy.
+- Energy was not measured because no reliable non-privileged energy counter was available in this run.
 
 Files:
 
