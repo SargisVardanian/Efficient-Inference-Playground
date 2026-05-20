@@ -14,6 +14,8 @@ Prompt file: `prompts/needle_eval_prompts.jsonl`
 
 ## Completed Local Run
 
+Important correction: this is not a full baseline / INT4 / KV comparison yet. The only completed numeric run is the installed local Ollama model, and Ollama reports that model as already quantized `Q4_K_M`.
+
 Available local model:
 
 | Backend | Model | Reported quantization | Context |
