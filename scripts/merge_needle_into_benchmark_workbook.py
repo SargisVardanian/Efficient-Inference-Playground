@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +9,10 @@ import pandas as pd
 
 DEFAULT_INPUT_WORKBOOK = "/Users/sargisvardanyan/Downloads/benchmark_results.xlsx"
 DEFAULT_OUTPUT_WORKBOOK = "results/benchmark_results.xlsx"
+ORIGINAL_HARDWARE = "Apple M4 Max"
+NEEDLE_HARDWARE = "Apple M3 Pro"
+ORIGINAL_SUITE = "summarization_reasoning"
+NEEDLE_SUITE = "needle_in_a_haystack"
 
 RAW_INPUTS = [
     "results/raw/hf_baseline_all_clean.csv",
@@ -44,8 +49,8 @@ def load_needle_runs() -> pd.DataFrame:
     df = df[df["experiment"].notna() & df["prompt_id"].notna()].copy()
     df = df.drop_duplicates(["experiment", "prompt_id", "run"], keep="last")
     df["experiment"] = df["experiment"].replace(EXPERIMENT_RENAMES)
-    df["hardware"] = "Apple M3 Pro"
-    df["benchmark_suite"] = "needle_in_a_haystack"
+    df["hardware"] = NEEDLE_HARDWARE
+    df["benchmark_suite"] = NEEDLE_SUITE
     df["backend"] = df["backend"].replace({"transformers": "huggingface"})
     df = df.rename(columns={"prompt_tokens": "input_tokens"})
     for col in [
@@ -86,8 +91,8 @@ def build_needle_quality(runs: pd.DataFrame) -> pd.DataFrame:
                 "rougeL_to_baseline": None,
                 "reference_exact_match": float(output == reference) if has_reference else None,
                 "reference_contains_match": float(reference in output) if has_reference else None,
-                "hardware": "Apple M3 Pro",
-                "benchmark_suite": "needle_in_a_haystack",
+                "hardware": NEEDLE_HARDWARE,
+                "benchmark_suite": NEEDLE_SUITE,
             }
         )
     return pd.DataFrame(rows)
@@ -126,8 +131,8 @@ def build_needle_summary(runs: pd.DataFrame, quality: pd.DataFrame) -> pd.DataFr
     out["rougeL_to_baseline"] = None
     out["char_similarity_to_baseline"] = None
     out["exact_match_to_baseline"] = None
-    out["hardware"] = "Apple M3 Pro"
-    out["benchmark_suite"] = "needle_in_a_haystack"
+    out["hardware"] = NEEDLE_HARDWARE
+    out["benchmark_suite"] = NEEDLE_SUITE
     return out
 
 
@@ -152,7 +157,7 @@ def drop_existing_needle_rows(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     mask = pd.Series(False, index=df.index)
     if "benchmark_suite" in df.columns:
-        mask |= df["benchmark_suite"].eq("needle_in_a_haystack")
+        mask |= df["benchmark_suite"].eq(NEEDLE_SUITE)
     if "experiment" in df.columns:
         mask |= df["experiment"].astype(str).str.startswith("needle_")
     return df.loc[~mask].copy()
@@ -166,6 +171,50 @@ def union_columns(left: pd.DataFrame, right: pd.DataFrame) -> list[str]:
     return cols
 
 
+def concat_aligned(frames: list[pd.DataFrame], columns: list[str]) -> pd.DataFrame:
+    usable = [frame.reindex(columns=columns) for frame in frames if len(frame)]
+    if not usable:
+        return pd.DataFrame(columns=columns)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated")
+        return pd.concat(usable, ignore_index=True)
+
+
+def build_notes() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "topic": "Workbook scope",
+                "note": "This is the single canonical benchmark workbook: original summarization/reasoning rows plus Needle all-variants rows.",
+            },
+            {
+                "topic": "Hardware",
+                "note": f"Original workbook rows use {ORIGINAL_HARDWARE}; Needle rows use {NEEDLE_HARDWARE}. Do not compare raw latency across hardware without this caveat.",
+            },
+            {
+                "topic": "Needle baseline/KV",
+                "note": "Needle HF baseline and HF KV rows use Hugging Face Transformers; long rows use the same CPU fallback policy and are comparable to each other.",
+            },
+            {
+                "topic": "Needle quantized",
+                "note": "Needle quantized rows are Ollama GGUF Q4_K_M fallback rows, not HF Metal INT4 rows.",
+            },
+            {
+                "topic": "KV interpretation",
+                "note": "Needle is long-input, short-output retrieval. It mostly measures prompt prefill, so KV recency-window is a workload-fit negative result rather than a universal KV-cache failure.",
+            },
+            {
+                "topic": "Memory metrics",
+                "note": "RSS columns are process-memory proxies, not true model VRAM measurements.",
+            },
+            {
+                "topic": "Prompt dataset",
+                "note": "The full 30-prompt Needle dataset is embedded in the Needle Prompts sheet.",
+            },
+        ]
+    )
+
+
 def write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
@@ -175,7 +224,20 @@ def write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
         from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
 
+        tab_colors = {
+            "Summary": "1F4E79",
+            "Latency p50 (s)": "70AD47",
+            "Throughput (tok-s)": "70AD47",
+            "ROUGE-L vs baseline": "70AD47",
+            "Quality (per run)": "FFC000",
+            "All Runs": "FFC000",
+            "Needle Prompts": "5B9BD5",
+            "Hardware & Notes": "7030A0",
+        }
+
         for ws in writer.book.worksheets:
+            if ws.title in tab_colors:
+                ws.sheet_properties.tabColor = tab_colors[ws.title]
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill("solid", fgColor="1F4E79")
@@ -183,6 +245,10 @@ def write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
             for col in ws.columns:
                 width = max((len(str(cell.value)) if cell.value is not None else 0) for cell in col)
                 ws.column_dimensions[get_column_letter(col[0].column)].width = min(max(width + 3, 12), 48)
+            for row in ws.iter_rows(min_row=2):
+                for cell in row:
+                    if isinstance(cell.value, float):
+                        cell.number_format = "0.000"
             ws.freeze_panes = "A2"
             ws.auto_filter.ref = ws.dimensions
 
@@ -198,8 +264,8 @@ def main() -> int:
     for sheet in ["Summary", "Quality (per run)", "All Runs"]:
         workbook[sheet] = add_hardware_columns(
             drop_existing_needle_rows(workbook[sheet]),
-            hardware="Apple M4 Max",
-            suite="summarization_reasoning",
+            hardware=ORIGINAL_HARDWARE,
+            suite=ORIGINAL_SUITE,
         )
 
     needle_runs = load_needle_runs()
@@ -210,21 +276,9 @@ def main() -> int:
     quality_cols = union_columns(workbook["Quality (per run)"], needle_quality)
     all_runs_cols = union_columns(workbook["All Runs"], needle_runs)
 
-    workbook["Summary"] = pd.concat(
-        [workbook["Summary"], needle_summary.reindex(columns=summary_cols)],
-        ignore_index=True,
-    )
-    workbook["Quality (per run)"] = pd.concat(
-        [workbook["Quality (per run)"], needle_quality.reindex(columns=quality_cols)],
-        ignore_index=True,
-    )
-    workbook["All Runs"] = pd.concat(
-        [
-            workbook["All Runs"],
-            needle_runs.reindex(columns=all_runs_cols),
-        ],
-        ignore_index=True,
-    )
+    workbook["Summary"] = concat_aligned([workbook["Summary"], needle_summary], summary_cols)
+    workbook["Quality (per run)"] = concat_aligned([workbook["Quality (per run)"], needle_quality], quality_cols)
+    workbook["All Runs"] = concat_aligned([workbook["All Runs"], needle_runs], all_runs_cols)
 
     combined_summary = workbook["Summary"]
     workbook["Latency p50 (s)"] = (
@@ -246,22 +300,29 @@ def main() -> int:
             "short": None,
         }
     )
-    workbook["ROUGE-L vs baseline"] = pd.concat([rouge, needle_rouge], ignore_index=True)
+    workbook["ROUGE-L vs baseline"] = concat_aligned([rouge, needle_rouge], union_columns(rouge, needle_rouge))
     workbook["Needle Prompts"] = load_needle_prompts()
-    workbook["Hardware"] = pd.DataFrame(
+    hardware = pd.DataFrame(
         [
             {
-                "hardware": "Apple M4 Max",
-                "benchmark_suite": "summarization_reasoning",
+                "hardware": ORIGINAL_HARDWARE,
+                "benchmark_suite": ORIGINAL_SUITE,
                 "applies_to": "original workbook rows",
             },
             {
-                "hardware": "Apple M3 Pro",
-                "benchmark_suite": "needle_in_a_haystack",
+                "hardware": NEEDLE_HARDWARE,
+                "benchmark_suite": NEEDLE_SUITE,
                 "applies_to": "Needle all-variants rows and Needle Prompts sheet",
             },
         ]
     )
+    workbook["Hardware & Notes"] = pd.concat(
+        [
+            hardware.assign(topic="Hardware", note=hardware["applies_to"]),
+            build_notes().assign(hardware=None, benchmark_suite=None, applies_to=None),
+        ],
+        ignore_index=True,
+    )[["topic", "hardware", "benchmark_suite", "applies_to", "note"]]
 
     ordered = [
         "Summary",
@@ -271,7 +332,7 @@ def main() -> int:
         "Quality (per run)",
         "All Runs",
         "Needle Prompts",
-        "Hardware",
+        "Hardware & Notes",
     ]
     sheets = {name: workbook[name] for name in ordered}
     write_workbook(Path(args.out), sheets)
