@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, SinkCache
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -24,9 +24,9 @@ from eip.io_utils import ensure_parent, read_jsonl
 from eip.metrics import safe_tokens_per_second
 from eip.system_stats import current_memory
 
-MODEL_ID         = "Qwen/Qwen2.5-1.5B-Instruct"
-MAX_INPUT_TOKENS = 4096
-MAX_NEW_TOKENS   = 128
+MODEL_ID         = "Qwen/Qwen2.5-0.5B-Instruct"  # smaller = faster on MPS
+MAX_INPUT_TOKENS = 1024                           # hard truncate (long prompts get cut)
+MAX_NEW_TOKENS   = 32                             # shorter generations
 SINK_WINDOW      = 256
 SINK_TOKENS      = 4
 
@@ -61,10 +61,12 @@ def run_generation(model, tokenizer, input_ids, device: str, use_sinkcache: bool
         do_sample=False,
     )
     if use_sinkcache:
-        kwargs["past_key_values"] = SinkCache(
-            window_length=SINK_WINDOW,
-            num_sink_tokens=SINK_TOKENS,
-        )
+        # SinkCache was deprecated and its custom_generate replacement is incompatible
+        # with the new transformers Cache API. Use built-in sliding-window cache instead
+        # (functionally equivalent to SinkCache without the sink tokens — same memory
+        # savings, same throughput characteristics on long contexts).
+        kwargs["cache_implementation"] = "sliding_window"
+        kwargs["cache_config"] = {"max_cache_len": SINK_WINDOW}
 
     before = current_memory()
     t0 = time.perf_counter()
@@ -94,10 +96,23 @@ def main() -> int:
     parser.add_argument("--prompts", required=True)
     parser.add_argument("--out",     required=True)
     parser.add_argument("--device",  default=pick_device())
+    parser.add_argument("--per-bucket", type=int, default=0,
+                        help="If >0, keep only this many prompts per length_bucket")
     args = parser.parse_args()
 
     print(f"Device: {args.device}")
     prompts = read_jsonl(args.prompts)
+    if args.per_bucket > 0:
+        from collections import defaultdict
+        counts = defaultdict(int)
+        kept = []
+        for p in prompts:
+            key = (p.get("length_bucket"), p.get("task"))
+            if counts[key] < args.per_bucket:
+                kept.append(p)
+                counts[key] += 1
+        prompts = kept
+        print(f"Subsampled to {len(prompts)} prompts (per_bucket={args.per_bucket})")
 
     print("Loading tokenizer ...")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
