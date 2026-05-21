@@ -6,6 +6,7 @@ Generated: 2026-05-22
 
 - `results/sargis_needle_benchmark_results.xlsx` - Sargis Needle benchmark workbook in the same multi-sheet format as Silvi's workbook.
 - `results/team_final_benchmark_results.xlsx` - combined Sargis + Silvi workbook with `owner` and `hardware` columns.
+- `datasets/sargis_needle/prompts.jsonl` - canonical 30-prompt Needle dataset used for Sargis's final results.
 - `results/processed/sargis_needle_summary.md` - markdown summary for Sargis Needle rows.
 - `results/processed/sargis_needle_final_summary.csv` - generated summary CSV; ignored by default but reproducible from the workbook script.
 - `results/processed/team_final_summary.csv` - generated team summary CSV; ignored by default but reproducible from the workbook script.
