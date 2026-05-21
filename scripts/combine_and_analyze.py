@@ -107,6 +107,15 @@ def compute_quality(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_summary(perf: pd.DataFrame, quality: pd.DataFrame) -> pd.DataFrame:
+    perf = perf.copy()
+    quality = quality.copy()
+    for col in ("latency_s", "tokens_per_second", "input_tokens", "generated_tokens"):
+        if col in perf.columns:
+            perf[col] = pd.to_numeric(perf[col], errors="coerce")
+    for col in ("rougeL_to_baseline", "char_similarity_to_baseline", "exact_match_to_baseline"):
+        if col in quality.columns:
+            quality[col] = pd.to_numeric(quality[col], errors="coerce")
+
     perf_g = perf.groupby(["experiment", "technique", "backend", "length_bucket", "task"]).agg(
         latency_p50=("latency_s", "median"),
         latency_p99=("latency_s", lambda x: x.quantile(0.99)),
@@ -156,7 +165,9 @@ def write_excel(all_runs: pd.DataFrame, quality: pd.DataFrame, summary: pd.DataF
 
         # Quality pivot
         if "rougeL_to_baseline" in quality.columns:
-            rgl = quality.groupby(["experiment", "length_bucket"])["rougeL_to_baseline"].mean().round(3).unstack()
+            q = quality.copy()
+            q["rougeL_to_baseline"] = pd.to_numeric(q["rougeL_to_baseline"], errors="coerce")
+            rgl = q.groupby(["experiment", "length_bucket"])["rougeL_to_baseline"].mean().round(3).unstack()
             rgl.to_excel(writer, sheet_name="ROUGE-L vs baseline")
 
         quality.to_excel(writer, sheet_name="Quality (per run)", index=False)
