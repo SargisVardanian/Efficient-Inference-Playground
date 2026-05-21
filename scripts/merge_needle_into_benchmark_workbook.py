@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
 import warnings
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pandas as pd
 
 DEFAULT_INPUT_WORKBOOK = "/Users/sargisvardanyan/Downloads/benchmark_results.xlsx"
 DEFAULT_OUTPUT_WORKBOOK = "results/benchmark_results.xlsx"
+SOURCE_BRANCH = "origin/experiments/baseline-kvcache"
 ORIGINAL_HARDWARE = "Apple M4 Max"
 NEEDLE_HARDWARE = "Apple M3 Pro"
 ORIGINAL_SUITE = "summarization_reasoning"
@@ -136,8 +139,56 @@ def build_needle_summary(runs: pd.DataFrame, quality: pd.DataFrame) -> pd.DataFr
     return out
 
 
+def infer_dataset(prompt_id: str) -> str:
+    if prompt_id.startswith("cnn_"):
+        return "cnn_dailymail"
+    if prompt_id.startswith("govreport_"):
+        return "govreport"
+    if prompt_id.startswith("gsm8k_"):
+        return "gsm8k"
+    if prompt_id.startswith("needle_"):
+        return "needle_in_a_haystack"
+    return ""
+
+
+def read_jsonl_text(text: str) -> list[dict]:
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def load_original_prompts() -> pd.DataFrame:
+    """Load the exact 60-prompt set used by the original branch workbook."""
+    try:
+        text = subprocess.check_output(
+            ["git", "show", f"{SOURCE_BRANCH}:prompts/eval_prompts.jsonl"],
+            text=True,
+        )
+        rows = read_jsonl_text(text)
+    except subprocess.CalledProcessError:
+        rows = read_jsonl_text(Path("prompts/eval_prompts.jsonl").read_text(encoding="utf-8"))
+        rows = [row for row in rows if not str(row.get("id", "")).startswith("needle_")]
+
+    df = pd.DataFrame(rows)
+    if "dataset" not in df.columns:
+        df["dataset"] = df["id"].map(infer_dataset)
+    df["hardware"] = ORIGINAL_HARDWARE
+    df["benchmark_suite"] = ORIGINAL_SUITE
+    df["source"] = f"{SOURCE_BRANCH}:prompts/eval_prompts.jsonl"
+    return df
+
+
 def load_needle_prompts() -> pd.DataFrame:
-    return pd.read_json("prompts/needle_eval_prompts.jsonl", lines=True)
+    df = pd.read_json("prompts/needle_eval_prompts.jsonl", lines=True)
+    df["hardware"] = NEEDLE_HARDWARE
+    df["benchmark_suite"] = NEEDLE_SUITE
+    df["source"] = "prompts/needle_eval_prompts.jsonl"
+    return df
+
+
+def load_all_prompts() -> pd.DataFrame:
+    columns = ["id", "length_bucket", "task", "dataset", "reference", "prompt", "hardware", "benchmark_suite", "source"]
+    original = load_original_prompts().reindex(columns=columns)
+    needle = load_needle_prompts().reindex(columns=columns)
+    return concat_aligned([original, needle], columns)
 
 
 def add_hardware_columns(df: pd.DataFrame, hardware: str, suite: str) -> pd.DataFrame:
@@ -209,7 +260,50 @@ def build_notes() -> pd.DataFrame:
             },
             {
                 "topic": "Prompt dataset",
-                "note": "The full 30-prompt Needle dataset is embedded in the Needle Prompts sheet.",
+                "note": "The Prompts sheet embeds the exact 60 original prompts from experiments/baseline-kvcache plus the 30 Needle prompts.",
+            },
+        ]
+    )
+
+
+def build_implemented_tasks() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "source": SOURCE_BRANCH,
+                "area": "Prompt datasets",
+                "implemented": "60-prompt original benchmark set",
+                "details": "10 prompts per bucket for summarization and reasoning: CNN/DailyMail short/medium, GovReport long, GSM8K short/medium/long.",
+            },
+            {
+                "source": SOURCE_BRANCH,
+                "area": "Ollama baseline",
+                "implemented": "baseline_gemma4_e4b",
+                "details": "Gemma4:e4b through Ollama, Q4_K_M GGUF, num_ctx=8192, num_predict=128, runs_per_prompt=3.",
+            },
+            {
+                "source": SOURCE_BRANCH,
+                "area": "Ollama KV-cache approximation",
+                "implemented": "kvcache_limited_512",
+                "details": "Gemma4:e4b through Ollama with num_ctx=512, treated as a practical context-window/KV pressure experiment.",
+            },
+            {
+                "source": SOURCE_BRANCH,
+                "area": "HF SinkCache/sliding-window",
+                "implemented": "hf_baseline and hf_sinkcache",
+                "details": "Qwen2.5 HF baseline and sliding-window cache comparison, max input 1024, max new tokens 32.",
+            },
+            {
+                "source": SOURCE_BRANCH,
+                "area": "Quality metrics",
+                "implemented": "ROUGE-L, char similarity, exact match to baseline",
+                "details": "Quality is output-vs-baseline for the original benchmark rows, not reference-answer scoring.",
+            },
+            {
+                "source": "main",
+                "area": "Needle all variants",
+                "implemented": "needle_hf_baseline, needle_ollama_quantized, needle_hf_kv_window",
+                "details": "30 Needle retrieval prompts, reference exact/contains scoring, Apple M3 Pro hardware.",
             },
         ]
     )
@@ -231,7 +325,8 @@ def write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
             "ROUGE-L vs baseline": "70AD47",
             "Quality (per run)": "FFC000",
             "All Runs": "FFC000",
-            "Needle Prompts": "5B9BD5",
+            "Prompts": "5B9BD5",
+            "Implemented Tasks": "5B9BD5",
             "Hardware & Notes": "7030A0",
         }
 
@@ -301,7 +396,8 @@ def main() -> int:
         }
     )
     workbook["ROUGE-L vs baseline"] = concat_aligned([rouge, needle_rouge], union_columns(rouge, needle_rouge))
-    workbook["Needle Prompts"] = load_needle_prompts()
+    workbook["Prompts"] = load_all_prompts()
+    workbook["Implemented Tasks"] = build_implemented_tasks()
     hardware = pd.DataFrame(
         [
             {
@@ -312,7 +408,7 @@ def main() -> int:
             {
                 "hardware": NEEDLE_HARDWARE,
                 "benchmark_suite": NEEDLE_SUITE,
-                "applies_to": "Needle all-variants rows and Needle Prompts sheet",
+                "applies_to": "Needle all-variants rows in Summary/All Runs and Prompts sheet",
             },
         ]
     )
@@ -331,7 +427,8 @@ def main() -> int:
         "ROUGE-L vs baseline",
         "Quality (per run)",
         "All Runs",
-        "Needle Prompts",
+        "Prompts",
+        "Implemented Tasks",
         "Hardware & Notes",
     ]
     sheets = {name: workbook[name] for name in ordered}
