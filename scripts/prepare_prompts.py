@@ -5,7 +5,7 @@ from pathlib import Path
 from datasets import load_dataset
 
 OUTPUT_FILE = "prompts/eval_prompts.jsonl"
-N_PER_BUCKET = 5
+N_PER_BUCKET = 10
 SEED = 42
 random.seed(SEED)
 
