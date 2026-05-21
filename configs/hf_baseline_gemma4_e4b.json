@@ -1,0 +1,12 @@
+{
+  "model_id": "google/gemma-4-E4B-it",
+  "runs_per_prompt": 1,
+  "device": "mps",
+  "experiments": [
+    {
+      "name": "hf_baseline_gemma4_e4b",
+      "technique": "baseline",
+      "max_new_tokens": 32
+    }
+  ]
+}

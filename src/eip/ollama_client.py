@@ -2,71 +2,60 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
-from typing import Any
-
-import httpx
 
 
 @dataclass
 class OllamaResult:
     output: str
     latency_s: float
-    first_token_latency_s: float | None
-    generated_tokens: int | None
-    prompt_tokens: int | None
+    generated_tokens: int
+    prompt_tokens: int
     eval_duration_s: float | None
     prompt_eval_duration_s: float | None
 
 
 class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434", timeout_s: float = 600) -> None:
+    def __init__(self, base_url: str = "http://localhost:11434") -> None:
         self.base_url = base_url.rstrip("/")
-        self.client = httpx.Client(timeout=timeout_s)
 
-    def tags(self) -> dict[str, Any]:
-        response = self.client.get(f"{self.base_url}/api/tags")
-        response.raise_for_status()
-        return response.json()
-
-    def generate_streaming(self, model: str, prompt: str, options: dict[str, Any]) -> OllamaResult:
-        started = time.perf_counter()
-        first_token_at: float | None = None
-        chunks: list[str] = []
-        final_payload: dict[str, Any] = {}
-
+    def generate(self, model: str, prompt: str, options: dict | None = None) -> OllamaResult:
         payload = {
             "model": model,
             "prompt": prompt,
-            "stream": True,
-            "options": options,
+            "stream": False,
+            "options": options or {},
         }
-        with self.client.stream("POST", f"{self.base_url}/api/generate", json=payload) as response:
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                item = json.loads(line)
-                token = item.get("response", "")
-                if token and first_token_at is None:
-                    first_token_at = time.perf_counter()
-                chunks.append(token)
-                if item.get("done"):
-                    final_payload = item
+        started = time.perf_counter()
+        request = urllib.request.Request(
+            f"{self.base_url}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=3600) as response:
+                body = response.read()
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Failed to call Ollama at {self.base_url}: {exc}") from exc
 
-        ended = time.perf_counter()
-        eval_count = final_payload.get("eval_count")
-        prompt_eval_count = final_payload.get("prompt_eval_count")
-        eval_duration_ns = final_payload.get("eval_duration")
-        prompt_eval_duration_ns = final_payload.get("prompt_eval_duration")
-
+        latency_s = time.perf_counter() - started
+        data = json.loads(body.decode("utf-8"))
+        eval_duration_s = _ns_to_s(data.get("eval_duration"))
+        prompt_eval_duration_s = _ns_to_s(data.get("prompt_eval_duration"))
         return OllamaResult(
-            output="".join(chunks),
-            latency_s=ended - started,
-            first_token_latency_s=(first_token_at - started) if first_token_at else None,
-            generated_tokens=eval_count,
-            prompt_tokens=prompt_eval_count,
-            eval_duration_s=(eval_duration_ns / 1e9) if eval_duration_ns else None,
-            prompt_eval_duration_s=(prompt_eval_duration_ns / 1e9) if prompt_eval_duration_ns else None,
+            output=data.get("response", ""),
+            latency_s=latency_s,
+            generated_tokens=int(data.get("eval_count") or 0),
+            prompt_tokens=int(data.get("prompt_eval_count") or 0),
+            eval_duration_s=eval_duration_s,
+            prompt_eval_duration_s=prompt_eval_duration_s,
         )
 
+
+def _ns_to_s(value: int | float | None) -> float | None:
+    if value is None:
+        return None
+    return float(value) / 1_000_000_000.0

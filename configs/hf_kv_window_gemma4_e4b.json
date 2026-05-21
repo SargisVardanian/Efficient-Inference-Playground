@@ -1,0 +1,16 @@
+{
+  "model_id": "google/gemma-4-E4B-it",
+  "runs_per_prompt": 1,
+  "device": "mps",
+  "experiments": [
+    {
+      "name": "hf_kv_window_gemma4_e4b",
+      "technique": "kv_cache_recency_window",
+      "max_new_tokens": 32,
+      "cache_policy": {
+        "type": "recency_window",
+        "window_length": 1024
+      }
+    }
+  ]
+}

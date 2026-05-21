@@ -6,30 +6,25 @@ Benchmark playground for Project D: compare efficient inference techniques for a
 
 Primary backend:
 
-- `Ollama` with local `gemma4:e4b` for baseline measurements.
-- Additional Ollama model tags can be added for quantized variants when available locally.
-
-Secondary backend:
-
-- Hugging Face Transformers for standardized baseline, quantization, speculative decoding, and KV-cache policy experiments.
+- Hugging Face Transformers for baseline and KV-cache rows.
+- Ollama GGUF fallback for the quantized row on this Apple Silicon machine when HF Metal INT4 is unstable.
 
 Techniques covered:
 
-- Baseline generation.
-- Weight quantization through Ollama model variants when available, or through Transformers quantization backends.
-- Speculative decoding through Transformers target + assistant models.
-- KV-cache policy experiments through Transformers cache controls.
+- Baseline generation with default cache.
+- 4-bit quantization via Ollama GGUF fallback (`Q4_K_M`) for the final quantized row on this machine.
+- KV-cache policy experiments through a Gemma4-compatible hybrid recency-window cache.
 
-Optional extension:
+Reviewed but intentionally not adopted as the primary KV row:
 
-- KV-cache policy experiments or long-context cache settings, if time and hardware allow.
+- Silvi's `Ollama + num_ctx=512` approximation, because it caps usable context instead of implementing sink-token retention plus a recent-window cache.
 
 ## Repository Layout
 
 ```text
 configs/                 Experiment configs
 prompts/                 Evaluation prompts at short, medium, and long lengths
-scripts/                 CLI entrypoints for checks, benchmarks, evaluation, and plots
+scripts/                 CLI entrypoints for prompt prep, benchmarks, evaluation, summaries, and plots
 src/eip/                 Reusable Python package code
 results/raw/             Raw benchmark CSV files
 results/processed/       Quality metrics and joined analysis CSV files
@@ -47,111 +42,118 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Check local Ollama models:
-
-```bash
-ollama list
-python scripts/check_ollama.py --model gemma4:e4b
-```
-
-Generate the standardized Needle-only prompt set:
+Generate the standardized prompt sets:
 
 ```bash
 python scripts/prepare_benchmark_prompts.py \
   --mode needle \
   --count 10 \
   --out prompts/needle_eval_prompts.jsonl
+
+python scripts/prepare_benchmark_prompts.py \
+  --mode full \
+  --count 10 \
+  --out prompts/eval_prompts.jsonl
 ```
 
-Run the Ollama benchmark:
+Check progress and get the next exact command:
 
 ```bash
-python scripts/run_ollama_benchmark.py \
-  --config configs/ollama_gemma4.json \
-  --prompts prompts/eval_prompts.jsonl \
-  --out results/raw/ollama_benchmark.csv
+.venv/bin/python scripts/check_benchmark_progress.py --markdown
 ```
 
-Compute quality metrics against the baseline output:
+Run the standardized Needle benchmark rows:
 
 ```bash
-python scripts/evaluate_quality.py \
-  --input results/raw/ollama_benchmark.csv \
-  --out results/processed/quality_metrics.csv
-```
+PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -dims .venv/bin/python scripts/run_hf_experiments.py \
+  --config configs/hf_baseline_gemma4_e4b.json \
+  --prompts prompts/needle_short_prompts.jsonl \
+  --out results/raw/hf_baseline_short.csv
 
-Generate plots:
+.venv/bin/python scripts/run_ollama_benchmark.py \
+  --config configs/ollama_quantized_gemma4_e4b.json \
+  --prompts prompts/needle_short_prompts.jsonl \
+  --out results/raw/ollama_quantized_short.csv
 
-```bash
-python scripts/make_plots.py \
-  --input results/raw/ollama_benchmark.csv \
-  --quality results/processed/quality_metrics.csv \
-  --outdir results/plots
-```
-
-Run speculative decoding through Hugging Face:
-
-```bash
-python scripts/run_hf_speculative.py \
-  --target_model Qwen/Qwen2.5-3B-Instruct \
-  --assistant_model Qwen/Qwen2.5-0.5B-Instruct \
-  --prompts prompts/eval_prompts.jsonl \
-  --out results/raw/hf_speculative.csv \
-  --max_new_tokens 128
-```
-
-Run the standardized Hugging Face baseline / int4 / KV benchmark:
-
-```bash
-python scripts/run_hf_experiments.py \
-  --config configs/hf_gemma4_e4b_needle.json \
-  --prompts prompts/needle_eval_prompts.jsonl \
-  --out results/raw/hf_needle_benchmark.csv
-
-python scripts/evaluate_task_quality.py \
-  --input results/raw/hf_needle_benchmark.csv \
-  --out results/processed/hf_needle_quality.csv
-
-python scripts/summarize_results.py \
-  --input results/raw/hf_needle_benchmark.csv \
-  --quality results/processed/hf_needle_quality.csv \
-  --out_csv results/processed/hf_needle_summary.csv \
-  --out_md results/processed/hf_needle_summary.md
+PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -dims .venv/bin/python scripts/run_hf_experiments.py \
+  --config configs/hf_kv_window_gemma4_e4b.json \
+  --prompts prompts/needle_short_prompts.jsonl \
+  --out results/raw/hf_kv_short.csv
 ```
 
 ## Experiment Matrix
 
-Start with this minimum table:
+Current standardized matrix:
 
 | Experiment | Backend | Technique | Notes |
 | --- | --- | --- | --- |
-| `baseline_gemma4_e4b` | Ollama | Baseline | Uses installed `gemma4:e4b` |
-| `quantized_variant_1` | Ollama | Quantization | Replace with installed Q4/Q8 tag |
-| `hf_baseline` | Transformers | Baseline | Same target model without assistant |
-| `hf_speculative` | Transformers | Speculative decoding | Target + smaller assistant |
+| `hf_baseline_gemma4_e4b` | Transformers | Baseline | Default KV-cache; short/medium on MPS, long may use CPU fallback |
+| `ollama_quantized_gemma4_e4b_q4km` | Ollama | Quantization | GGUF `Q4_K_M` fallback because HF Metal INT4 was unstable on this machine |
+| `hf_kv_window_gemma4_e4b` | Transformers | KV-cache optimization | Hybrid recency-window: keep native sliding layers and apply a 1024-token contiguous recency window to full-attention layers |
 
-Measure each row on short, medium, and long prompts.
+The full prompt generator standardizes all team buckets to 10 prompts each. The current Sargis execution scope is Needle short, medium, and long with 10 prompts per bucket.
 
 ## Metrics
 
 Speed:
 
 - end-to-end latency in seconds
-- first-token latency in seconds for streaming Ollama runs
 - throughput in generated tokens per second
 - per-token latency estimate
 
 Memory:
 
 - process RSS delta and peak RSS where observable
-- optional `nvidia-smi` peak VRAM on CUDA machines
-- optional `powermetrics` or external tooling for energy
+- system memory usage before and after each run
+- these are reported as memory proxies, not true device VRAM measurements
 
 Quality:
 
-- exact match against baseline greedy output
-- ROUGE-L against baseline output
-- embedding similarity when `sentence-transformers` is available
+- exact match against prompt reference
+- contains-match against prompt reference
+
+Interpretation notes:
+
+- latency is end-to-end wall-clock latency per prompt, not isolated decode-only latency
+- per-token latency is a proxy computed as `latency_s / generated_tokens`
+- tokens/sec is adequate for within-project comparison, but very small outputs can make it noisy
+- baseline and quantized rows are already methodologically usable
+- KV metrics are only final after the rerun under the new `recency_window` policy completes
+
+Not collected in the current local setup:
+
+- energy
+- strict KL divergence to baseline
+- ROUGE-L to baseline
+- similarity-to-baseline metrics beyond exact/contains
+
+Fallback candidate only:
+
+- `Qwen/Qwen2.5-1.5B-Instruct` is kept as a documented contingency model for KV experiments if Gemma4 KV proves infeasible on local Apple Silicon. It is not the primary planned row.
+
+## Team Reproduction
+
+For teammates reproducing the current standardized setup:
+
+1. Create and activate `.venv`, then install `requirements.txt`.
+2. Use the committed prompt files in `prompts/` instead of regenerating new prompt sets.
+3. Treat these files as canonical inputs:
+   - `prompts/needle_short_prompts.jsonl`
+   - `prompts/needle_medium_prompts.jsonl`
+   - `prompts/needle_long_prompts.jsonl`
+4. Treat these files as canonical baseline outputs:
+   - `results/raw/hf_baseline_all_clean.csv`
+   - `results/processed/hf_baseline_summary.csv`
+5. For the quantized row on Apple Silicon, use the Ollama fallback config:
+   - `configs/ollama_quantized_gemma4_e4b.json`
+6. For the KV row, use only the current hybrid recency-window config:
+   - `configs/hf_kv_window_gemma4_e4b.json`
+
+Important:
+
+- Do not use the older Gemma4 attention-sink KV results as final evidence.
+- Do not claim VRAM or energy metrics; the repository reports memory proxies only.
+- Compare long-latency rows only against other rows that used the same CPU fallback policy.
 
 ## Deadline Note
 

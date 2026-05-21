@@ -1,0 +1,23 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "runs_per_prompt": 1,
+  "generation_options": {
+    "temperature": 0,
+    "top_p": 1,
+    "num_predict": 32,
+    "num_ctx": 8192,
+    "seed": 42
+  },
+  "experiments": [
+    {
+      "name": "ollama_quantized_gemma4_e4b_q4km",
+      "model": "gemma4:e4b",
+      "technique": "quantization",
+      "quantization": {
+        "method": "gguf_q4_k_m",
+        "bits": 4
+      },
+      "device_runtime_note": "Ollama GGUF Q4_K_M fallback because HF Metal INT4 kernels failed on this Apple Silicon machine."
+    }
+  ]
+}

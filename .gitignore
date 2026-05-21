@@ -3,9 +3,10 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+.idea/
+results/logs/
 results/raw/*.csv
 results/processed/*.csv
 results/plots/*.png
 results/plots/*.pdf
 *.zip
-

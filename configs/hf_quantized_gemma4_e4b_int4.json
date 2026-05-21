@@ -1,0 +1,16 @@
+{
+  "model_id": "google/gemma-4-E4B-it",
+  "runs_per_prompt": 1,
+  "device": "mps",
+  "experiments": [
+    {
+      "name": "hf_quantized_gemma4_e4b_int4",
+      "technique": "quantization",
+      "max_new_tokens": 32,
+      "quantization": {
+        "method": "metal",
+        "bits": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+pandas>=2.2
+matplotlib>=3.8
+psutil>=5.9
+transformers>=5.8,<5.9
+accelerate>=0.34
+torch==2.10.0
+torchvision==0.25.0
+kernels>=0.14,<0.15
+datasets>=2.20
