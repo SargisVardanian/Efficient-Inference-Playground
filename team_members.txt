@@ -1,2 +1,2 @@
-# Add team member names here, one per line.
+Team members: Sargis Vardanyan, Silvi Avayan, Mikayel Hambaryan, Elen Ghalechyan
 
