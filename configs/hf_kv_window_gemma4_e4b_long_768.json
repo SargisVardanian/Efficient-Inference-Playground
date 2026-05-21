@@ -9,7 +9,7 @@
       "max_new_tokens": 32,
       "cache_policy": {
         "type": "recency_window",
-        "window_length": 512
+        "window_length": 768
       }
     }
   ]

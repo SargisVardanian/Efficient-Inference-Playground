@@ -89,7 +89,7 @@ Current standardized matrix:
 | --- | --- | --- | --- |
 | `hf_baseline_gemma4_e4b` | Transformers | Baseline | Default KV-cache; short/medium on MPS, long may use CPU fallback |
 | `ollama_quantized_gemma4_e4b_q4km` | Ollama | Quantization | GGUF `Q4_K_M` fallback because HF Metal INT4 was unstable on this machine |
-| `hf_kv_window_gemma4_e4b` | Transformers | KV-cache optimization | Hybrid recency-window: keep native sliding layers and apply a 1024-token contiguous recency window to full-attention layers |
+| `hf_kv_window_gemma4_e4b` | Transformers | KV-cache optimization | Hybrid recency-window: keep native sliding layers and apply a 512-token contiguous recency window to full-attention layers for short/medium; long final run uses 768 |
 
 The full prompt generator standardizes all team buckets to 10 prompts each. The current Sargis execution scope is Needle short, medium, and long with 10 prompts per bucket.
 

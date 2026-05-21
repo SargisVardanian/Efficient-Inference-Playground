@@ -49,7 +49,7 @@ This repository now supports a standardized Needle benchmark with a mixed-backen
 - `results/raw/hf_baseline_short.csv`, `results/raw/hf_baseline_medium.csv`, and `results/raw/hf_baseline_long.csv` are the valid baseline bucket files.
 - `results/raw/hf_baseline_all_clean.csv` is the canonical baseline source built from those three bucket files.
 - Speculative decoding is out of scope until a smaller draft model is available.
-- The active KV-cache row uses a Gemma4-compatible hybrid recency-window policy: native sliding layers are preserved, and full-attention layers keep a contiguous 1024-token recency window.
+- The active KV-cache row uses a Gemma4-compatible hybrid recency-window policy: native sliding layers are preserved, and full-attention layers keep a contiguous 512-token recency window for short/medium; the final long run uses 768.
 - Older Gemma4 attention-sink KV rows should not be treated as canonical evidence.
 - HF Metal INT4 failed on this machine because the external Apple Metal quantization kernel stack was unstable, so the quantized row falls back to Ollama GGUF `Q4_K_M`.
 - Long baseline and long KV must be compared only against rows that used the same CPU fallback policy.

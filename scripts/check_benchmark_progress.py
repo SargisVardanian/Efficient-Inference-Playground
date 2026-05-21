@@ -73,7 +73,7 @@ EXPECTED_RUNS = [
         "experiment": "hf_kv_window_gemma4_e4b",
         "csv": "results/raw/hf_kv_long.csv",
         "prompts": "prompts/needle_long_prompts.jsonl",
-        "command": 'PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -dims .venv/bin/python scripts/run_hf_experiments.py --config configs/hf_kv_window_gemma4_e4b.json --prompts prompts/needle_long_prompts.jsonl --out results/raw/hf_kv_long.csv',
+        "command": 'PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -dims .venv/bin/python scripts/run_hf_experiments.py --config configs/hf_kv_window_gemma4_e4b_long_768.json --prompts prompts/needle_long_prompts.jsonl --out results/raw/hf_kv_long.csv',
     },
 ]
 
