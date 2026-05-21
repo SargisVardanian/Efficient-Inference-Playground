@@ -161,25 +161,51 @@ python scripts/make_plots.py \
 
 ---
 
-## Sample Results (5 prompts × 3 runs, Apple M4 Max)
+## Results (60 prompts × 3 runs, Apple M4 Max)
 
-Latency in seconds (median across 3 runs):
+### Latency — seconds per generation (median, lower = better)
 
-| Experiment                | Short | Medium | Long |
-|---------------------------|------:|-------:|-----:|
-| `baseline_gemma4_e4b`     | 1.80  | 1.78   | 2.96 |
-| `kvcache_limited_512`     | 1.79  | 1.77   | 3.39 |
+| Experiment | Short (~150 tok) | Medium (~800 tok) | Long (~8 000 tok) |
+|---|---:|---:|---:|
+| `baseline_gemma4_e4b` (8 192 ctx) | **1.62** | **1.64** | **1.77** ⭐ |
+| `kvcache_limited_512` (512 ctx)   | 1.68 | 1.66 | 3.25 ❌ |
 
-Throughput (tokens / second):
+### Throughput — tokens / second (median, higher = better)
 
-| Experiment                | Short | Medium | Long |
-|---------------------------|------:|-------:|-----:|
-| `baseline_gemma4_e4b`     | 90.0  | 89.5   | 85.9 |
-| `kvcache_limited_512`     | 89.3  | 89.3   | 86.0 |
+| Experiment | Short | Medium | Long |
+|---|---:|---:|---:|
+| `baseline_gemma4_e4b` | 90.2 | 89.8 | 85.8 |
+| `kvcache_limited_512` | 89.0 | 89.4 | 87.2 |
 
-**Observation.** On short and medium prompts the KV-cache cap is essentially free — the cache was never the bottleneck. On the long 8 000-token prompt, capping context to 512 tokens is actually 15 % **slower**, because Ollama still has to ingest the full prompt and the cache-management overhead dominates. KV-cache eviction is a **memory** trade-off, not a guaranteed **speed** trade-off, especially on a fast unified-memory chip.
+### Key Finding
 
-Full results land in `results/benchmark_results.xlsx` after step 5.
+**KV-cache eviction is a memory trade-off, not a speed trade-off.**
+
+On short and medium prompts the two configurations are statistically identical — the cache was never the bottleneck. On the long 8 000-token prompt, however, capping the context window to 512 tokens makes inference **~2× slower** (3.25 s vs 1.77 s).
+
+This is initially counter-intuitive but mechanically clear:
+
+1. Ollama still has to ingest the full 8 000-token input regardless of `num_ctx`.
+2. Constraining the cache to 512 tokens forces continuous eviction and re-computation of attention during prompt processing.
+3. The eviction overhead exceeds any memory savings on a fast unified-memory chip with plenty of RAM headroom (37 GB).
+
+**Implication.** KV-cache eviction (SinkCache, H2O, StreamingLLM, etc.) pays off when:
+- VRAM is the binding constraint (e.g., 8 GB laptop GPU running long-context inference);
+- many concurrent requests share one model and per-request memory must shrink;
+- prompts dwarf the cache budget by orders of magnitude.
+
+On a single-user M4 Max running one prompt at a time, KV-cache eviction is a **cost**, not a win. The performance cliff appears only at the long-prompt extreme, exactly where attention-cache pressure becomes real.
+
+### Reproducing These Numbers
+
+```bash
+python scripts/prepare_prompts.py
+python scripts/run_ollama_benchmark.py --config configs/ollama_gemma4.json   --prompts prompts/eval_prompts.jsonl --out results/raw/ollama_benchmark.csv
+python scripts/combine_and_analyze.py
+open results/benchmark_results.xlsx
+```
+
+Full results land in `results/benchmark_results.xlsx` (5 styled sheets: Summary, Latency, Throughput, ROUGE-L, All Runs).
 
 ---
 
