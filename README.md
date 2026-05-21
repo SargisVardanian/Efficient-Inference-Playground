@@ -155,6 +155,4 @@ Important:
 - Do not claim VRAM or energy metrics; the repository reports memory proxies only.
 - Compare long-latency rows only against other rows that used the same CPU fallback policy.
 
-## Deadline Note
 
-The assignment deadline is Friday, 22 May 2026, 12:00 AM. Treat this as the beginning of Friday and plan to submit on Thursday evening, 21 May 2026.
